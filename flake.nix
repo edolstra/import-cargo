@@ -86,10 +86,17 @@
             directory = "vendor"
             EOF
 
+            declare -A keysSeen
+
             for i in ${toString unpackedCrates}; do
               ln -s $i $out/vendor/$(basename "$i" | cut -c 34-)
               if [[ -e "$i/.cargo-config" ]]; then
-                cat "$i/.cargo-config" >> $out/vendor/config
+                # Ensure we emit TOML keys only once.
+                key=$(sed 's/\[source\."\(.*\)"\]/\1/; t; d' < "$i/.cargo-config")
+                if [[ -z ''${keysSeen[$key]} ]]; then
+                  keysSeen[$key]=1
+                  cat "$i/.cargo-config" >> $out/vendor/config
+                fi
               fi
             done
           '';
