@@ -48,7 +48,9 @@
                   tree=${tree}
 
                   if grep --quiet '\[workspace\]' $tree/Cargo.toml; then
-                    tree=$tree/${pkg.name}
+                    if [[ -e $tree/${pkg.name} ]]; then
+                      tree=$tree/${pkg.name}
+                    fi
                   fi
 
                   cp -prvd $tree/ $out
