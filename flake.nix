@@ -1,11 +1,9 @@
 {
-  name = "import-cargo";
-
-  epoch = 201906;
+  edition = 201909;
 
   description = "A function for fetching the crates listed in a Cargo lock file";
 
-  outputs = inputs: rec {
+  outputs = { self }: rec {
 
     builders.importCargo =
       { lockFile, pkgs }:
