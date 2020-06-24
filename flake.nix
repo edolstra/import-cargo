@@ -1,6 +1,4 @@
 {
-  edition = 201909;
-
   description = "A function for fetching the crates listed in a Cargo lock file";
 
   outputs = { self }: rec {
@@ -21,7 +19,7 @@
 
             if pkg.source == registry then
               let
-                sha256 = lockFile'.metadata."checksum ${pkg.name} ${pkg.version} (${registry})";
+                sha256 = pkg.checksum or lockFile'.metadata."checksum ${pkg.name} ${pkg.version} (${registry})";
                 tarball = import <nix/fetchurl.nix> {
                   url = "https://crates.io/api/v1/crates/${pkg.name}/${pkg.version}/download";
                   inherit sha256;
