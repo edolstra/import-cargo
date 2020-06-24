@@ -102,7 +102,7 @@
         # because then we end up with a runtime dependency on it.
         cargoHome = pkgs.makeSetupHook {}
           (pkgs.writeScript "make-cargo-home" ''
-            if [[ -z $CARGO_HOME || $CARGO_HOME = /build ]]; then
+            if [[ -z "''${CARGO_HOME-}" || "''${CARGO_HOME-}" = /build ]]; then
               export CARGO_HOME=$TMPDIR/vendor
               # FIXME: work around Rust 1.36 wanting a $CARGO_HOME/.package-cache file.
               #ln -s ${vendorDir}/vendor $CARGO_HOME
