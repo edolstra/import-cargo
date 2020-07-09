@@ -1,6 +1,4 @@
 {
-  edition = 201909;
-
   description = "A function for fetching the crates listed in a Cargo lock file";
 
   outputs = { self }: rec {
@@ -21,7 +19,7 @@
 
             if pkg.source == registry then
               let
-                sha256 = lockFile'.metadata."checksum ${pkg.name} ${pkg.version} (${registry})";
+                sha256 = pkg.checksum or lockFile'.metadata."checksum ${pkg.name} ${pkg.version} (${registry})";
                 tarball = import <nix/fetchurl.nix> {
                   url = "https://crates.io/api/v1/crates/${pkg.name}/${pkg.version}/download";
                   inherit sha256;
@@ -104,7 +102,7 @@
         # because then we end up with a runtime dependency on it.
         cargoHome = pkgs.makeSetupHook {}
           (pkgs.writeScript "make-cargo-home" ''
-            if [[ -z $CARGO_HOME || $CARGO_HOME = /build ]]; then
+            if [[ -z "''${CARGO_HOME-}" || "''${CARGO_HOME-}" = /build ]]; then
               export CARGO_HOME=$TMPDIR/vendor
               # FIXME: work around Rust 1.36 wanting a $CARGO_HOME/.package-cache file.
               #ln -s ${vendorDir}/vendor $CARGO_HOME
