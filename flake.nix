@@ -14,14 +14,19 @@
 
             let
               isGit = builtins.match ''git\+(.*)\?rev=([0-9a-f]+)(#.*)?'' pkg.source;
-              registry = "registry+https://github.com/rust-lang/crates.io-index";
+              isRegistry = builtins.match ''registry\+(.*)'' pkg.source;
             in
 
-            if pkg.source == registry then
+            if isRegistry != null then
               let
-                sha256 = pkg.checksum or lockFile'.metadata."checksum ${pkg.name} ${pkg.version} (${registry})";
-                tarball = import <nix/fetchurl.nix> {
-                  url = "https://crates.io/api/v1/crates/${pkg.name}/${pkg.version}/download";
+                regIndex = builtins.fetchGit {
+                  url = builtins.elemAt isRegistry 0;
+                };
+                regConfig = builtins.readFile (regIndex + /config.json);
+                regUrl = (builtins.fromJSON regConfig).dl;
+                sha256 = pkg.checksum or lockFile'.metadata."checksum ${pkg.name} ${pkg.version} (${pkg.source})";
+                tarball = builtins.fetchurl {
+                  url = "${regUrl}/${pkg.name}/${pkg.version}/download";
                   inherit sha256;
                 };
               in pkgs.runCommand "${pkg.name}-${pkg.version}" {}
