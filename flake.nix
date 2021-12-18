@@ -4,9 +4,13 @@
   outputs = { self }: rec {
 
     builders.importCargo =
-      { lockFile, pkgs }:
-      let lockFile' = builtins.fromTOML (builtins.readFile lockFile); in
-      rec {
+      { lockFile, pkgs, registries ? {} }:
+      let
+        lockFile' = builtins.fromTOML (builtins.readFile lockFile);
+        registriesUrl = {
+          "https://github.com/rust-lang/crates.io-index" = "https://crates.io/api/v1/crates/";
+        } // registries;
+      in rec {
 
         # Fetch and unpack the crates specified in the lock file.
         unpackedCrates = map
@@ -19,11 +23,8 @@
 
             if isRegistry != null then
               let
-                regIndex = builtins.fetchGit {
-                  url = builtins.elemAt isRegistry 0;
-                };
-                regConfig = builtins.readFile (regIndex + /config.json);
-                regUrl = (builtins.fromJSON regConfig).dl;
+                registry = builtins.elemAt isRegistry 0;
+                regUrl = registriesUrl."${registry}" or (throw ''Unsupported registry: ${registry}. Add {"${registry}" = <registry-dl>; ... } to registries'');
                 sha256 = pkg.checksum or lockFile'.metadata."checksum ${pkg.name} ${pkg.version} (${pkg.source})";
                 tarball = builtins.fetchurl {
                   url = "${regUrl}/${pkg.name}/${pkg.version}/download";
@@ -82,6 +83,16 @@
             cat > $out/vendor/config <<EOF
             [source.crates-io]
             replace-with = "vendored-sources"
+            ${
+              (builtins.foldl' (res: name:
+                  res + ''
+                  [source."${name}"]
+                  registry = "${name}"
+                  replace-with = "vendored-sources"
+                  ''
+                ) "" (builtins.attrNames registries)
+              )
+            }
 
             [source.vendored-sources]
             directory = "vendor"
