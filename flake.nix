@@ -44,7 +44,10 @@
               let
                 rev = builtins.elemAt isGit 1;
                 url = builtins.elemAt isGit 0;
-                tree = builtins.fetchGit { inherit url rev; };
+                tree = builtins.fetchGit { 
+                  inherit url rev;
+                  allRefs = true; 
+                };
               in pkgs.runCommand "${pkg.name}-${pkg.version}" {}
                 ''
                   tree=${tree}
