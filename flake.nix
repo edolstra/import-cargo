@@ -17,7 +17,17 @@
           (pkg:
 
             let
-              isGit = builtins.match ''git\+(.*)\?rev=([0-9a-f]+)(#.*)?'' pkg.source;
+              gitRegexp = x: builtins.match "git\+(.*)\?((branch=(.+)#([0-9a-f]+)(#.*)?)|(rev=([0-9a-f]+)(#.*)?))" x;
+              isGit = let gitArr = gitRegexp pkg.source; in
+                if isNull gitArr then
+                  null
+                else
+                    let url_ = builtins.elemAt gitArr 0;
+                        url = builtins.substring 1 (builtins.stringLength url_ - 2) url_;
+                        rev4 = builtins.elemAt gitArr 3;
+                        rev5 = builtins.elemAt gitArr 4;
+                        rev8 = builtins.elemAt gitArr 7;
+                    in if isNull rev4 then [url null rev8] else [url rev4 rev5];
               isRegistry = builtins.match ''registry\+(.*)'' pkg.source;
             in
 
@@ -42,7 +52,8 @@
 
             else if isGit != null then
               let
-                rev = builtins.elemAt isGit 1;
+                rev = builtins.elemAt isGit 2;
+                branch = builtins.elemAt isGit 1;
                 url = builtins.elemAt isGit 0;
                 tree = builtins.fetchGit { 
                   inherit url rev;
@@ -65,8 +76,9 @@
                   printf '{"files":{},"package":null}' > "$out/.cargo-checksum.json"
 
                   cat > $out/.cargo-config <<EOF
-                  [source."${url}"]
+                  [source."${url}${if isNull branch then "" else "?branch=${branch}"}"]
                   git = "${url}"
+                  ${if isNull branch then "" else "branch = \"${branch}\""}
                   rev = "${rev}"
                   replace-with = "vendored-sources"
                   EOF
