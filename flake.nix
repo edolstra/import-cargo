@@ -59,11 +59,12 @@
                   inherit url rev;
                   allRefs = true; 
                 };
+                isInner = ((fromTOML (builtins.readFile (tree  + /Cargo.toml))).package or {}).name != pkg.name;
               in pkgs.runCommand "${pkg.name}-${pkg.version}" {}
                 ''
                   tree=${tree}
 
-                  if grep --quiet '\[workspace\]' $tree/Cargo.toml; then
+                  if ${if isInner then "true" else "false"} || grep --quiet 'name = \[workspace\]' $tree/Cargo.toml; then
                     if [[ -e $tree/${pkg.name} ]]; then
                       tree=$tree/${pkg.name}
                     fi
