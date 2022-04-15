@@ -4,24 +4,40 @@
   outputs = { self }: rec {
 
     builders.importCargo =
-      { lockFile, pkgs }:
-      let lockFile' = builtins.fromTOML (builtins.readFile lockFile); in
-      rec {
+      { lockFile, pkgs, registries ? {} }:
+      let
+        lockFile' = builtins.fromTOML (builtins.readFile lockFile);
+        registriesUrl = {
+          "https://github.com/rust-lang/crates.io-index" = "https://crates.io/api/v1/crates/";
+        } // registries;
+      in rec {
 
         # Fetch and unpack the crates specified in the lock file.
         unpackedCrates = map
           (pkg:
 
             let
-              isGit = builtins.match ''git\+(.*)\?rev=([0-9a-f]+)(#.*)?'' pkg.source;
-              registry = "registry+https://github.com/rust-lang/crates.io-index";
+              gitRegexp = x: builtins.match "git\+(.*)\?((branch=(.+)#([0-9a-f]+)(#.*)?)|(rev=([0-9a-f]+)(#.*)?))" x;
+              isGit = let gitArr = gitRegexp pkg.source; in
+                if isNull gitArr then
+                  null
+                else
+                    let url_ = builtins.elemAt gitArr 0;
+                        url = builtins.substring 1 (builtins.stringLength url_ - 2) url_;
+                        rev4 = builtins.elemAt gitArr 3;
+                        rev5 = builtins.elemAt gitArr 4;
+                        rev8 = builtins.elemAt gitArr 7;
+                    in if isNull rev4 then [url null rev8] else [url rev4 rev5];
+              isRegistry = builtins.match ''registry\+(.*)'' pkg.source;
             in
 
-            if pkg.source == registry then
+            if isRegistry != null then
               let
-                sha256 = pkg.checksum or lockFile'.metadata."checksum ${pkg.name} ${pkg.version} (${registry})";
-                tarball = import <nix/fetchurl.nix> {
-                  url = "https://crates.io/api/v1/crates/${pkg.name}/${pkg.version}/download";
+                registry = builtins.elemAt isRegistry 0;
+                regUrl = registriesUrl."${registry}" or (throw ''Unsupported registry: ${registry}. Add {"${registry}" = <registry-dl>; ... } to registries'');
+                sha256 = pkg.checksum or lockFile'.metadata."checksum ${pkg.name} ${pkg.version} (${pkg.source})";
+                tarball = builtins.fetchurl {
+                  url = "${regUrl}/${pkg.name}/${pkg.version}/download";
                   inherit sha256;
                 };
               in pkgs.runCommand "${pkg.name}-${pkg.version}" {}
@@ -36,14 +52,19 @@
 
             else if isGit != null then
               let
-                rev = builtins.elemAt isGit 1;
+                rev = builtins.elemAt isGit 2;
+                branch = builtins.elemAt isGit 1;
                 url = builtins.elemAt isGit 0;
-                tree = builtins.fetchGit { inherit url rev; };
+                tree = builtins.fetchGit { 
+                  inherit url rev;
+                  allRefs = true; 
+                };
+                isInner = ((fromTOML (builtins.readFile (tree  + /Cargo.toml))).package or {}).name != pkg.name;
               in pkgs.runCommand "${pkg.name}-${pkg.version}" {}
                 ''
                   tree=${tree}
 
-                  if grep --quiet '\[workspace\]' $tree/Cargo.toml; then
+                  if ${if isInner then "true" else "false"} || grep --quiet 'name = \[workspace\]' $tree/Cargo.toml; then
                     if [[ -e $tree/${pkg.name} ]]; then
                       tree=$tree/${pkg.name}
                     fi
@@ -56,8 +77,9 @@
                   printf '{"files":{},"package":null}' > "$out/.cargo-checksum.json"
 
                   cat > $out/.cargo-config <<EOF
-                  [source."${url}"]
+                  [source."${url}${if isNull branch then "" else "?branch=${branch}"}"]
                   git = "${url}"
+                  ${if isNull branch then "" else "branch = \"${branch}\""}
                   rev = "${rev}"
                   replace-with = "vendored-sources"
                   EOF
@@ -77,6 +99,16 @@
             cat > $out/vendor/config <<EOF
             [source.crates-io]
             replace-with = "vendored-sources"
+            ${
+              (builtins.foldl' (res: name:
+                  res + ''
+                  [source."${name}"]
+                  registry = "${name}"
+                  replace-with = "vendored-sources"
+                  ''
+                ) "" (builtins.attrNames registries)
+              )
+            }
 
             [source.vendored-sources]
             directory = "vendor"
